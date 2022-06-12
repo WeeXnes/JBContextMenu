@@ -1,6 +1,10 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq.Expressions;
+using System.Management.Instrumentation;
+using System.Runtime.CompilerServices;
+using System.Security.AccessControl;
 using IWshRuntimeLibrary;
 using Microsoft.Win32;
 using File = System.IO.File;
@@ -14,10 +18,50 @@ namespace JBContextMenu
         public const string fileMenuRegistry = @"\*\shell";
         public const string bgMenuRegistry = @"\Directory\Background\shell";
         public const string folderMenuRegistry = @"\Directory\shell";
+        public const string subCommandsRegistry = @"SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\CommandStore\shell";
         
         
         
         public static void Main(string[] args)
+        {
+            Console.WriteLine("----------------JBContextMenu----------------\n1)Create Items in Main Context Menu\n2)Create Items in SubMenu");
+            Console.Write("\nSelect:");
+            int selection = 0;
+            bool input_success = false;
+            while (!input_success)
+            {
+                try
+                {
+                    string input =  Console.ReadLine();
+                    selection = Convert.ToInt32(input);
+                    input_success = true;
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine("Wrong Input!");
+                }
+                
+            }
+
+            switch (selection)
+            {
+                case 1:
+                    createInMainMenu();
+                    break;
+                case 2:
+                    createInSubMenu();
+                    break;
+                default:
+                    Console.WriteLine("No valid input");
+                    Console.ReadKey();
+                    Environment.Exit(0);
+                    break;
+            }
+
+            
+        }
+
+        public static void createInMainMenu()
         {
             string appdatapath = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
             string subpath = LinkPath;
@@ -40,6 +84,43 @@ namespace JBContextMenu
             Console.WriteLine("Press and Key to close...");
             Console.ReadKey();
         }
+        public static void createInSubMenu()
+        {
+            string appdatapath = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+            string subpath = LinkPath;
+            string finalpath = Path.Combine(appdatapath, subpath);
+            string [] fileEntries = Directory.GetFiles(finalpath);
+            List<string> Files = new List<string>();
+            foreach (string s in fileEntries)
+            {
+                if (Path.GetFileName(s) != "JetBrains Toolbox.lnk")
+                {
+                    Files.Add(s);
+                }
+            }
+
+            foreach (var file in Files)
+            {
+                createEntriesAlt(file);
+            }
+
+            string toolboxpath = GetTargetFromShortcut(Path.Combine(finalpath, "JetBrains Toolbox.lnk"));
+            Console.WriteLine(toolboxpath);
+            Console.WriteLine();
+            List<string> subcmd = new List<string>();
+            foreach (var file in Files)
+            {
+                string name = Path.GetFileName(file);
+                string DisplayName = name.Substring(0, name.Length - 4);
+                subcmd.Add("JetBrains " + DisplayName);
+            }
+
+            writeToRegistryAlt(MenuType.FolderMenu, subcmd, toolboxpath + ",0");
+            writeToRegistryAlt(MenuType.BackgroundMenu, subcmd, toolboxpath + ",0");
+            writeToRegistryAlt(MenuType.FileMenu, subcmd, toolboxpath + ",0");
+            Console.WriteLine("Press and Key to close...");
+            Console.ReadKey();
+        }
 
         static void createEntries(string path)
         {
@@ -53,6 +134,19 @@ namespace JBContextMenu
                 writeToRegistry(MenuType.BackgroundMenu, DisplayName, exepath, exepath + ",0");
                 writeToRegistry(MenuType.FolderMenu, DisplayName, exepath, exepath + ",0");
             }
+        }
+        static void createEntriesAlt(string path)
+        {
+            string name = Path.GetFileName(path);
+            string exepath = GetTargetFromShortcut(path);
+            string DisplayName = name.Substring(0, name.Length - 4);
+            if (path != null)
+            {
+                Console.WriteLine("-------------------------" + DisplayName + "-------------------------");
+                writeToRegistrySubCommands(MenuType.FileMenu, DisplayName, exepath, exepath + ",0");
+                writeToRegistrySubCommands(MenuType.FolderMenu, DisplayName, exepath, exepath + ",0");
+            }
+            
         }
 
         public static string GetTargetFromShortcut(string filename)
@@ -117,5 +211,97 @@ namespace JBContextMenu
 
             }
         }
+        public static void writeToRegistryAlt(MenuType type, List<string> subcommands, string icon)
+        {
+            
+            string key;
+            string subcommandSuffix = "";
+            
+            if (type == MenuType.FileMenu)
+            {
+                key = fileMenuRegistry;
+                subcommandSuffix = "F";
+            }
+            else if (type == MenuType.BackgroundMenu)
+            {
+                key = bgMenuRegistry;
+                subcommandSuffix = "D";
+            }
+            else if (type == MenuType.FolderMenu)
+            {
+                key = folderMenuRegistry;
+                subcommandSuffix = "D";
+            }
+            else
+            {
+                key = fileMenuRegistry;
+            }
+            string subcommandsStr = "";
+            foreach (var s in subcommands)
+            {
+                subcommandsStr = subcommandsStr + s + subcommandSuffix + ";";
+            }
+            subcommandsStr = subcommandsStr.Substring(0, subcommandsStr.Length - 1);
+
+            using (var shellKey = Registry.ClassesRoot.OpenSubKey(key, true))
+            {
+                shellKey.CreateSubKey("JetBrains ToolBox");
+                using (var menuEntryKey = shellKey.OpenSubKey("JetBrains ToolBox", true))
+                {
+                    menuEntryKey.SetValue("icon", icon);
+                    menuEntryKey.SetValue("SubCommands", subcommandsStr); 
+                }
+
+            }
+        }
+        public static void writeToRegistrySubCommands(MenuType type, string text, string command, string icon)
+        {
+            string suffix;
+            string indicator;
+            if (type == MenuType.FileMenu)
+            {
+                suffix = "\"%1\"";
+                indicator = "F";
+            }
+            else if (type == MenuType.FolderMenu)
+            {
+                suffix = "\"%V\"";
+                indicator = "D";
+            }
+            else
+            {
+                suffix = "\"%1\"";
+                indicator = "D";
+            }
+            RegistryKey myKey = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry64);
+            myKey = myKey.OpenSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\CommandStore\shell", RegistryKeyPermissionCheck.ReadWriteSubTree, RegistryRights.FullControl);
+            myKey.CreateSubKey("testplswork");
+            
+            using (RegistryKey BaseKey = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry64))
+            {
+
+                using(RegistryKey shellKey = BaseKey.OpenSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\CommandStore\shell", RegistryKeyPermissionCheck.ReadWriteSubTree, RegistryRights.FullControl))
+                {
+                    shellKey.CreateSubKey("JetBrains " + text + indicator);
+                    using (var menuEntryKey = shellKey.OpenSubKey("JetBrains " + text + indicator, RegistryKeyPermissionCheck.ReadWriteSubTree, RegistryRights.FullControl))
+                    {
+                        menuEntryKey.SetValue("", "Open in " + text);
+                        menuEntryKey.SetValue("icon", icon);
+                        menuEntryKey.CreateSubKey("Command");
+                        using (var commandKey = menuEntryKey.OpenSubKey("Command", RegistryKeyPermissionCheck.ReadWriteSubTree, RegistryRights.FullControl))
+                        {
+                            commandKey.SetValue("", "\"" + command + "\" " + suffix);
+                            Console.WriteLine(type + " for " + text + " has been created");
+                        }
+                    }
+                }
+
+                
+            }
+
+
+
+        }
+        
     }
 }
