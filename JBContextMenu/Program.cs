@@ -21,26 +21,52 @@ namespace JBContextMenu
         public const string subCommandsRegistry = @"SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\CommandStore\shell";
         
         
+        //autostartstuff
+
+        public static bool AutostartEnabled = false;
+        
+        public static int selection = 0;
+
+
+        public static void getStartArgs(string[] args)
+        {
+            
+            foreach (var arg in args)
+            {
+                Console.WriteLine("Arg: " + arg);
+                if (arg == "-autostart")
+                    AutostartEnabled = true;
+
+                if (arg == "-mode1")
+                    selection = 1;
+                if (arg == "-mode2")
+                    selection = 2;
+            }
+        }
         
         public static void Main(string[] args)
         {
-            Console.WriteLine("----------------JBContextMenu----------------\n1)Create Items in Main Context Menu\n2)Create Items in SubMenu");
-            Console.Write("\nSelect:");
-            int selection = 0;
+            getStartArgs(args);
+            
             bool input_success = false;
-            while (!input_success)
+            if (!AutostartEnabled)
             {
-                try
+                Console.WriteLine("----------------JBContextMenu----------------\n1)Create Items in Main Context Menu\n2)Create Items in SubMenu");
+                Console.Write("\nSelect:");
+                while (!input_success)
                 {
-                    string input =  Console.ReadLine();
-                    selection = Convert.ToInt32(input);
-                    input_success = true;
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine("Wrong Input!");
-                }
+                    try
+                    {
+                        string input =  Console.ReadLine();
+                        selection = Convert.ToInt32(input);
+                        input_success = true;
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine("Wrong Input!");
+                    }
                 
+                }
             }
 
             switch (selection)
@@ -82,7 +108,8 @@ namespace JBContextMenu
             }
 
             Console.WriteLine("Press and Key to close...");
-            Console.ReadKey();
+            if(!AutostartEnabled)
+                Console.ReadKey();
         }
         public static void createInSubMenu()
         {
@@ -119,7 +146,8 @@ namespace JBContextMenu
             writeToRegistryAlt(MenuType.BackgroundMenu, subcmd, toolboxpath + ",0");
             writeToRegistryAlt(MenuType.FileMenu, subcmd, toolboxpath + ",0");
             Console.WriteLine("Press and Key to close...");
-            Console.ReadKey();
+            if(!AutostartEnabled)
+                Console.ReadKey();
         }
 
         static void createEntries(string path)
