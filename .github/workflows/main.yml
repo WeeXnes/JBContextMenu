@@ -1,0 +1,65 @@
+name: .NET Framework
+
+on:
+  push:
+    branches: [ "master" ]
+  pull_request:
+    branches: [ "master" ]
+
+jobs:
+  build:
+
+    runs-on: windows-latest
+
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Setup MSBuild
+      uses: microsoft/setup-msbuild@v1
+      
+    - name: Setup NuGet
+      uses: NuGet/setup-nuget@v1.1.1
+      
+    - name: Navigate to Workspace
+      run: cd $GITHUB_WORKSPACE
+      
+    - name: Restore Packages
+      run: nuget restore JBContextMenu.sln
+      
+    - name: Build Solution
+      run: |
+        msbuild.exe JBContextMenu.sln /p:DeleteExistingFiles=True /p:platform="Any CPU" /p:configuration="Release"
+        
+ 
+
+  
+    - uses: bbonkr/get-version-action@v1.0.4
+      id: get_version
+      with:
+        project: "JBContextMenu/version.csproj"
+    - name: logging
+      run: |
+        echo "Version=${{ steps.get_version.outputs.version }}"
+        
+     
+    - name: release
+      uses: actions/create-release@v1
+      id: create_release
+      with:
+        draft: false
+        prerelease: false
+        release_name: v${{ steps.get_version.outputs.version }}
+        tag_name: ${{ steps.get_version.outputs.version }}
+      env:
+        GITHUB_TOKEN: ${{ github.token }}
+    - name: upload windows artifact
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ github.token }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: D:\a\JBContextMenu\JBContextMenu\bin\Release\JBContextMenu.exe
+        asset_name: JBContextMenu.exe 
+        asset_content_type: application/zip
+      
+    
